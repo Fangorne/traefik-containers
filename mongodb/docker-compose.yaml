@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo
+    restart: always
+    container_name: mongo
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongo
+      - MONGO_INITDB_ROOT_PASSWORD=mongo
+    ports:
+      - 27017:27017
+    command: mongod --bind_ip_all --port 27017
+    volumes:
+      - data:/data/db:rw
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.tcp.routers.mongo.entrypoints=https
+      - traefik.tcp.routers.mongo.rule=HostSNI(`My.Ip.com`)
+      - traefik.tcp.services.mongo.loadbalancer.server.port=27017
+      - traefik.tcp.routers.mongo.service=mongo
+      - traefik.tcp.routers.mongo.tls.certresolver=http
+      - traefik.http.routers.mongo.tls=true
+      - traefik.tcp.routers.mongo.tls.passthrough=true
+    networks:
+      - web
+volumes:
+   data:
+networks:
+  web:
+    external: true

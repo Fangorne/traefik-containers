@@ -1,0 +1,111 @@
+version: '3'
+
+services:
+  reverse-proxy:
+    image: traefik:latest
+    container_name: traefik
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+      - 5672:5672
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - --global.checkNewVersion=true
+      - --log=true
+      - --log.level=DEBUG
+      - --global.sendAnonymousUsage=true
+    labels:
+      # Redirect all HTTP to HTTPS permanently
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.entrypoints=http"
+      - "traefik.http.routers.traefik.rule=Host(`myip.myip.me`) && (PathPrefix(`/traefik`) || PathPrefix(`/api`))"
+      - "traefik.http.middlewares.traefik-stripprefix.stripprefix.prefixes=/traefik"
+      - "traefik.http.middlewares.auth.basicauth.users=traefik:$$apr1$$tslCkFcq$$TBmtEelz8YU6dKnyNZdyg/"
+      - "traefik.http.middlewares.traefik-https-redirect.redirectscheme.scheme=https"
+
+      - "traefik.http.middlewares.tls-rep.redirectregex.permanent=true"
+      - "traefik.http.middlewares.tls-header.headers.SSLRedirect=true"
+      - "traefik.http.middlewares.tls-header.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.tls-header.headers.STSSeconds=315360000"
+      - "traefik.http.middlewares.tls-header.headers.STSIncludeSubdomains=true"
+      - "traefik.http.middlewares.tls-header.headers.STSPreload=true"
+      - "traefik.http.middlewares.tls-header.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.tls-header.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.tls-header.headers.frameDeny=false"
+      - "traefik.http.middlewares.tls-header.headers.customFrameOptionsValue=SAMEORIGIN"
+      - "traefik.http.middlewares.tls-header.headers.featurePolicy=accelerometer 'none'; ambient-light-sensor 'none'; camera 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphon
+e 'none'; usb 'none'; midi 'none'; sync-xhr 'none'; vr 'none'"
+      - "traefik.http.middlewares.tls-header.headers.referrerPolicy=strict-origin-when-cross-origin"
+
+      - "traefik.http.middlewares.tls-chain.chain.middlewares=tls-rep,tls-header"
+      - "traefik.http.routers.traefik-secure.entrypoints=https"
+      - "traefik.http.routers.traefik-secure.rule=Host(`myip.myip.me`) && (PathPrefix(`/traefik`) || PathPrefix(`/api`))"
+      - "traefik.http.routers.traefik-secure.middlewares=auth"
+      - "traefik.http.routers.traefik-secure.tls=true"
+      - "traefik.http.routers.traefik-secure.tls.certresolver=http"
+      - "traefik.http.routers.traefik-secure.service=api@internal"
+      - "traefik.http.routers.traefik-secure.middlewares=traefik-stripprefix,tls-chain"
+
+
+    volumes:
+      - ./logs:/logs
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - ./acme.json:/acme.json:rw
+      - ./dynamic_conf.yml:/dynamic_conf.yml
+
+    restart: always
+    networks:
+      - web
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.17
+    environment:
+      JAEGER_AGENT_HOST: "jaeger"
+      JAEGER_AGENT_PORT: "6831"
+      COLLECTOR_ZIPKIN_HTTP_PORT: 9411
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "9411:9411"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jaeger.entrypoints=http"
+      - "traefik.http.routers.jaeger.rule=Host(`jaeger.myip.myip.com`)"
+#      - "traefik.http.routers.jaeger.middlewares=http"
+#      - "traefik.http.routers.jaeger-secure.entrypoints=https"
+#      - "traefik.http.routers.jaeger-secure.rule=Host(`jaeger.myip.myip.com`) "
+#      - "traefik.http.routers.jaeger-secure.tls=true"
+#      - "traefik.http.routers.jaeger-secure.tls.certresolver=http"
+      - "traefik.http.routers.jaeger.service=jaeger"
+      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
+      - "traefik.docker.network=web"
+
+  hotrod:
+    image: jaegertracing/example-hotrod:1.17
+    command: all
+    labels:
+      traefik.http.routers.hotrod.rule: Host(`hotrod.myip.myip.com`)
+      traefik.http.routers.hotrod.entrypoints: web
+      traefik.http.routers.hotrod.service: hotrod
+      traefik.http.services.hotrod.loadbalancer.server.port: 8080
+      traefik.http.routers.hotrod-secure.rule: Host(`hotrod.myip.myip.com`)
+
+
+    environment:
+      JAEGER_AGENT_HOST: "jaeger"
+      JAEGER_AGENT_PORT: "6831"
+
+networks:
+  internal:
+  web:
+    external: true
+

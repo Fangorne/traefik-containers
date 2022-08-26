@@ -1,0 +1,122 @@
+version: '3'
+
+services:
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager:/config
+      - alertmanager-data:/data
+    command: --config.file=/config/alertmanager.yml --log.level=debug
+
+  mongodb-exporter:
+    image: docker.io/bitnami/mongodb-exporter:latest
+    ports:
+      - 9216:9216
+    expose:
+      - 9216
+    networks:
+      - internal
+      - web
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    expose:
+      - 9100
+    networks:
+      - internal
+      - web
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    container_name: prometheus
+    volumes:
+      - ./prometheus/:/opt/containers/monitoring/prometheus/
+      - prometheus:/prometheus
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    command:
+      - "--web.route-prefix=/"
+      - "--web.external-url=https://prometheus.myip.myip.com"
+      - "--config.file=/opt/containers/monitoring/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - 9090:9090
+    networks:
+      - web
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.prometheus.entrypoints=http
+      - traefik.http.routers.prometheus.rule=Host(`prometheus.myip.myip.com`)
+      - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+      - traefik.http.routers.prometheus.middlewares=https-redirect
+      - traefik.http.routers.prometheus-secure.entrypoints=https
+      - traefik.http.routers.prometheus-secure.rule=Host(`prometheus.myip.myip.com`)
+      - traefik.http.routers.prometheus-secure.middlewares=tls-chain
+      - traefik.http.routers.prometheus-secure.tls=true
+      - traefik.http.routers.prometheus-secure.tls.certresolver=http
+      - traefik.http.routers.prometheus-secure.service=prometheus
+      - traefik.http.services.prometheus.loadbalancer.server.port=9090
+      - traefik.docker.network=web
+    depends_on:
+      - alertmanager
+      - node-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    container_name: grafana
+    volumes:
+      - grafana-data:/var/lib/grafana:rw
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - grafana.env
+    depends_on:
+      - prometheus
+    networks:
+      - web
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.entrypoints=http
+      - traefik.http.routers.grafana.rule=Host(`grafana.myip.myip.com`)
+      - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+      - traefik.http.routers.grafana.middlewares=https-redirect
+      - traefik.http.routers.grafana-secure.entrypoints=https
+      - traefik.http.routers.grafana-secure.rule=Host(`grafana.myip.myip.com`)
+      - traefik.http.routers.grafana-secure.middlewares=tls-chain
+      - traefik.http.routers.grafana-secure.tls=true
+      - traefik.http.routers.grafana-secure.tls.certresolver=http
+      - traefik.http.routers.grafana-secure.service=grafana
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+      - traefik.docker.network=web
+
+networks:
+  internal:
+  web:
+    external: true
+
+volumes:
+  prometheus:
+  grafana-data:
+  alertmanager-data:

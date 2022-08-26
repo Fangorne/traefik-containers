@@ -1,0 +1,52 @@
+api:
+  dashboard: true
+entryPoints:
+  http:
+    address: ":80"
+  https:
+    address: ":443"
+  metrics:
+    address: ":8080"
+  rabbitmq:
+    address: ":5672"
+  mongo:
+    address: ":27017"
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    buckets:
+      - 0.1
+      - 0.3
+      - 1.2
+      - 5.0
+    addEntryPointsLabels: true
+    addServicesLabels: true
+
+accessLog:
+  filePath: "./logs/traefik.log"
+  format: json
+#  level: DEBUG
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+  # Second, a dynamic configuration file - we'll come back to that file below.
+  file:
+    filename: "/dynamic_conf.yml"
+
+certificatesResolvers:
+  http:
+    acme:
+      email: marcus_the@msn.com   # CHANGE HERE
+      storage: acme.json
+      httpChallenge:
+        entryPoint: http
+        
+tracing:
+  serviceName: traefik
+  jaeger:
+    samplingServerURL: "http://JAEGER_FQDN:5778/sampling"
+    samplingType: "const"
+    localAgentHostPort: "jaeger:6831"
