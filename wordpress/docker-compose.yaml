@@ -65,6 +65,9 @@ services:
     ports:
       - "8180:80"
     restart: always
+    networks:
+      - lan
+      - web
 
 volumes:
   db:
