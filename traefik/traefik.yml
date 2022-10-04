@@ -39,7 +39,7 @@ providers:
 certificatesResolvers:
   http:
     acme:
-      email: marcus_the@msn.com   # CHANGE HERE
+      email: -----@---.---   # CHANGE HERE
       storage: acme.json
       httpChallenge:
         entryPoint: http
